@@ -188,6 +188,68 @@ describe("skills", () => {
 			expect(skills).toHaveLength(1);
 			expect(skills[0].disableModelInvocation).toBe(false);
 		});
+
+		it("should parse model frontmatter field", () => {
+			const { skills, diagnostics } = loadSkillsFromDir({
+				dir: join(fixturesDir, "model-skill"),
+				source: "test",
+			});
+
+			expect(skills).toHaveLength(1);
+			expect(skills[0].name).toBe("model-skill");
+			expect(skills[0].model).toBe("claude-sonnet");
+			expect(skills[0].modelSize).toBeUndefined();
+			expect(diagnostics).toHaveLength(0);
+		});
+
+		it("should parse model-size frontmatter field", () => {
+			const { skills, diagnostics } = loadSkillsFromDir({
+				dir: join(fixturesDir, "model-size-skill"),
+				source: "test",
+			});
+
+			expect(skills).toHaveLength(1);
+			expect(skills[0].name).toBe("model-size-skill");
+			expect(skills[0].modelSize).toBe("small");
+			expect(skills[0].model).toBeUndefined();
+			expect(diagnostics).toHaveLength(0);
+		});
+
+		it("should parse both model and model-size frontmatter fields", () => {
+			const { skills, diagnostics } = loadSkillsFromDir({
+				dir: join(fixturesDir, "model-and-size-skill"),
+				source: "test",
+			});
+
+			expect(skills).toHaveLength(1);
+			expect(skills[0].name).toBe("model-and-size-skill");
+			expect(skills[0].model).toBe("gpt-4o");
+			expect(skills[0].modelSize).toBe("large");
+			expect(diagnostics).toHaveLength(0);
+		});
+
+		it("should warn on invalid model-size and leave modelSize undefined", () => {
+			const { skills, diagnostics } = loadSkillsFromDir({
+				dir: join(fixturesDir, "invalid-model-size"),
+				source: "test",
+			});
+
+			expect(skills).toHaveLength(1);
+			expect(skills[0].name).toBe("invalid-model-size");
+			expect(skills[0].modelSize).toBeUndefined();
+			expect(diagnostics.some((d: ResourceDiagnostic) => d.message.includes("invalid model-size"))).toBe(true);
+		});
+
+		it("should default model and modelSize to undefined when not specified", () => {
+			const { skills } = loadSkillsFromDir({
+				dir: join(fixturesDir, "valid-skill"),
+				source: "test",
+			});
+
+			expect(skills).toHaveLength(1);
+			expect(skills[0].model).toBeUndefined();
+			expect(skills[0].modelSize).toBeUndefined();
+		});
 	});
 
 	describe("formatSkillsForPrompt", () => {

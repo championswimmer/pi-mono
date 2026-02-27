@@ -67,6 +67,8 @@ export interface SkillFrontmatter {
 	name?: string;
 	description?: string;
 	"disable-model-invocation"?: boolean;
+	model?: string;
+	"model-size"?: "small" | "medium" | "large";
 	[key: string]: unknown;
 }
 
@@ -77,6 +79,10 @@ export interface Skill {
 	baseDir: string;
 	source: string;
 	disableModelInvocation: boolean;
+	/** Optional model identifier for this skill */
+	model?: string;
+	/** Optional model size preference for this skill */
+	modelSize?: "small" | "medium" | "large";
 }
 
 export interface LoadSkillsResult {
@@ -261,6 +267,22 @@ function loadSkillFromFile(
 			return { skill: null, diagnostics };
 		}
 
+		// Validate model-size if provided
+		const validModelSizes = ["small", "medium", "large"] as const;
+		const rawModelSize = frontmatter["model-size"];
+		const modelSize =
+			typeof rawModelSize === "string" && validModelSizes.includes(rawModelSize as (typeof validModelSizes)[number])
+				? (rawModelSize as "small" | "medium" | "large")
+				: undefined;
+
+		if (rawModelSize !== undefined && modelSize === undefined) {
+			diagnostics.push({
+				type: "warning",
+				message: `invalid model-size "${rawModelSize}" (must be "small", "medium", or "large")`,
+				path: filePath,
+			});
+		}
+
 		return {
 			skill: {
 				name,
@@ -269,6 +291,8 @@ function loadSkillFromFile(
 				baseDir: skillDir,
 				source,
 				disableModelInvocation: frontmatter["disable-model-invocation"] === true,
+				model: typeof frontmatter.model === "string" ? frontmatter.model : undefined,
+				modelSize,
 			},
 			diagnostics,
 		};
