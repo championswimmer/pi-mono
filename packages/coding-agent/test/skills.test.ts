@@ -508,18 +508,15 @@ describe("skills", () => {
 		});
 
 		it("should accept all valid model sizes", () => {
-			// Valid sizes are tested through fixtures: small (model-size-skill), large (model-and-size-skill)
-			// Also test that the Skill interface accepts 'medium'
-			const skill: Skill = {
-				name: "test",
-				description: "test",
-				filePath: "/test",
-				baseDir: "/test",
+			// Test 'medium' from a fixture (small and large already covered above)
+			const { skills, diagnostics } = loadSkillsFromDir({
+				dir: join(fixturesDir, "medium-model-size"),
 				source: "test",
-				disableModelInvocation: false,
-				modelSize: "medium",
-			};
-			expect(skill.modelSize).toBe("medium");
+			});
+
+			expect(skills).toHaveLength(1);
+			expect(skills[0].modelSize).toBe("medium");
+			expect(diagnostics).toHaveLength(0);
 		});
 	});
 });

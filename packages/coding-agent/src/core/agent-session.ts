@@ -385,7 +385,7 @@ export class AgentSession {
 			}
 		}
 
-		// Restore original model after skill model override
+		// Restore original model after skill model override (applied in prompt() before agent.prompt())
 		if (event.type === "agent_end" && this._skillModelOverride) {
 			this.agent.setModel(this._skillModelOverride);
 			this._skillModelOverride = undefined;
@@ -749,9 +749,9 @@ export class AgentSession {
 		let expandedText = currentText;
 		let matchedSkill: Skill | undefined;
 		if (expandPromptTemplates) {
-			const skillResult = this._expandSkillCommand(expandedText);
-			expandedText = skillResult.text;
-			matchedSkill = skillResult.skill;
+			const skillExpansion = this._expandSkillCommand(expandedText);
+			expandedText = skillExpansion.text;
+			matchedSkill = skillExpansion.skill;
 			expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 		}
 
