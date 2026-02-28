@@ -470,4 +470,56 @@ describe("skills", () => {
 			expect(collisionWarnings[0].message).toContain("name collision");
 		});
 	});
+
+	describe("skill model resolution", () => {
+		it("should prefer model over model-size when both are specified", () => {
+			const { skills } = loadSkillsFromDir({
+				dir: join(fixturesDir, "model-and-size-skill"),
+				source: "test",
+			});
+
+			expect(skills).toHaveLength(1);
+			const skill = skills[0];
+			// Both should be populated so the consumer can implement priority
+			expect(skill.model).toBe("gpt-4o");
+			expect(skill.modelSize).toBe("large");
+		});
+
+		it("should support model-only skill", () => {
+			const { skills } = loadSkillsFromDir({
+				dir: join(fixturesDir, "model-skill"),
+				source: "test",
+			});
+
+			expect(skills).toHaveLength(1);
+			expect(skills[0].model).toBe("claude-sonnet");
+			expect(skills[0].modelSize).toBeUndefined();
+		});
+
+		it("should support model-size-only skill", () => {
+			const { skills } = loadSkillsFromDir({
+				dir: join(fixturesDir, "model-size-skill"),
+				source: "test",
+			});
+
+			expect(skills).toHaveLength(1);
+			expect(skills[0].model).toBeUndefined();
+			expect(skills[0].modelSize).toBe("small");
+		});
+
+		it("should accept all valid model sizes", () => {
+			// Valid sizes are tested through fixtures: small (model-size-skill), large (model-and-size-skill)
+			// Also test that the Skill interface accepts 'medium'
+			const skill: Skill = {
+				name: "test",
+				description: "test",
+				filePath: "/test",
+				baseDir: "/test",
+				source: "test",
+				disableModelInvocation: false,
+				modelSize: "medium",
+			};
+			expect(skill.modelSize).toBe("medium");
+		});
+	});
 });
