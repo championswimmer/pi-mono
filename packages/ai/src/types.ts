@@ -285,8 +285,6 @@ export interface VercelGatewayRouting {
 	order?: string[];
 }
 
-export type ModelSize = "small" | "medium" | "large";
-
 // Model interface for the unified model system
 export interface Model<TApi extends Api> {
 	id: string;
@@ -304,7 +302,6 @@ export interface Model<TApi extends Api> {
 	};
 	contextWindow: number;
 	maxTokens: number;
-	size?: ModelSize;
 	headers?: Record<string, string>;
 	/** Compatibility overrides for OpenAI-compatible APIs. If not set, auto-detected from baseUrl. */
 	compat?: TApi extends "openai-completions"

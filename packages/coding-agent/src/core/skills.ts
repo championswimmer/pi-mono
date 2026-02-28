@@ -67,8 +67,6 @@ export interface SkillFrontmatter {
 	name?: string;
 	description?: string;
 	"disable-model-invocation"?: boolean;
-	model?: string;
-	model_size?: "small" | "medium" | "large";
 	[key: string]: unknown;
 }
 
@@ -79,8 +77,6 @@ export interface Skill {
 	baseDir: string;
 	source: string;
 	disableModelInvocation: boolean;
-	model?: string;
-	modelSize?: "small" | "medium" | "large";
 }
 
 export interface LoadSkillsResult {
@@ -273,13 +269,6 @@ function loadSkillFromFile(
 				baseDir: skillDir,
 				source,
 				disableModelInvocation: frontmatter["disable-model-invocation"] === true,
-				model: typeof frontmatter.model === "string" ? frontmatter.model.trim() || undefined : undefined,
-				modelSize:
-					frontmatter.model_size === "small" ||
-					frontmatter.model_size === "medium" ||
-					frontmatter.model_size === "large"
-						? frontmatter.model_size
-						: undefined,
 			},
 			diagnostics,
 		};
