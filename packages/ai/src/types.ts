@@ -40,6 +40,8 @@ export type KnownProvider =
 	| "kimi-coding";
 export type Provider = KnownProvider | string;
 
+export type ModelSize = "small" | "medium" | "large";
+
 export type ThinkingLevel = "minimal" | "low" | "medium" | "high" | "xhigh";
 
 /** Token budgets for each thinking level (token-based providers only) */
@@ -302,6 +304,8 @@ export interface Model<TApi extends Api> {
 	};
 	contextWindow: number;
 	maxTokens: number;
+	/** Optional model size classification */
+	size?: ModelSize;
 	headers?: Record<string, string>;
 	/** Compatibility overrides for OpenAI-compatible APIs. If not set, auto-detected from baseUrl. */
 	compat?: TApi extends "openai-completions"

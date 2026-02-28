@@ -23,8 +23,10 @@ import type {
 	AgentTool,
 	ThinkingLevel,
 } from "@mariozechner/pi-agent-core";
-import type { AssistantMessage, ImageContent, Message, Model, TextContent } from "@mariozechner/pi-ai";
+import type { Api, AssistantMessage, ImageContent, Message, Model, TextContent } from "@mariozechner/pi-ai";
 import { isContextOverflow, modelsAreEqual, resetApiProviders, supportsXhigh } from "@mariozechner/pi-ai";
+import type { Skill } from "./skills.js";
+import { parseModelPattern } from "./model-resolver.js";
 import { getDocsPath } from "../config.js";
 import { theme } from "../modes/interactive/theme/theme.js";
 import { stripFrontmatter } from "../utils/frontmatter.js";
@@ -265,6 +267,9 @@ export class AgentSession {
 	// Model registry for API key resolution
 	private _modelRegistry: ModelRegistry;
 
+	// Skill model override: stores the original model while a skill override is active
+	private _skillModelOverride: Model<any> | undefined = undefined;
+
 	// Tool registry for extension getTools/setTools
 	private _toolRegistry: Map<string, AgentTool> = new Map();
 
@@ -378,6 +383,12 @@ export class AgentSession {
 					this._resolveRetry();
 				}
 			}
+		}
+
+		// Restore original model after skill model override (applied in prompt() before agent.prompt())
+		if (event.type === "agent_end" && this._skillModelOverride) {
+			this.agent.setModel(this._skillModelOverride);
+			this._skillModelOverride = undefined;
 		}
 
 		// Check auto-retry and auto-compaction after agent completes
@@ -736,8 +747,11 @@ export class AgentSession {
 
 		// Expand skill commands (/skill:name args) and prompt templates (/template args)
 		let expandedText = currentText;
+		let matchedSkill: Skill | undefined;
 		if (expandPromptTemplates) {
-			expandedText = this._expandSkillCommand(expandedText);
+			const skillExpansion = this._expandSkillCommand(expandedText);
+			expandedText = skillExpansion.text;
+			matchedSkill = skillExpansion.skill;
 			expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 		}
 
@@ -840,6 +854,15 @@ export class AgentSession {
 			}
 		}
 
+		// Apply skill model override if the matched skill has model preferences
+		if (matchedSkill && (matchedSkill.model || matchedSkill.modelSize)) {
+			const overrideModel = await this._resolveSkillModel(matchedSkill);
+			if (overrideModel && !modelsAreEqual(overrideModel, this.model)) {
+				this._skillModelOverride = this.model;
+				this.agent.setModel(overrideModel);
+			}
+		}
+
 		await this.agent.prompt(messages);
 		await this.waitForRetry();
 	}
@@ -877,24 +900,25 @@ export class AgentSession {
 
 	/**
 	 * Expand skill commands (/skill:name args) to their full content.
-	 * Returns the expanded text, or the original text if not a skill command or skill not found.
+	 * Returns the expanded text and the matched skill (if any).
 	 * Emits errors via extension runner if file read fails.
 	 */
-	private _expandSkillCommand(text: string): string {
-		if (!text.startsWith("/skill:")) return text;
+	private _expandSkillCommand(text: string): { text: string; skill?: Skill } {
+		if (!text.startsWith("/skill:")) return { text };
 
 		const spaceIndex = text.indexOf(" ");
 		const skillName = spaceIndex === -1 ? text.slice(7) : text.slice(7, spaceIndex);
 		const args = spaceIndex === -1 ? "" : text.slice(spaceIndex + 1).trim();
 
 		const skill = this.resourceLoader.getSkills().skills.find((s) => s.name === skillName);
-		if (!skill) return text; // Unknown skill, pass through
+		if (!skill) return { text }; // Unknown skill, pass through
 
 		try {
 			const content = readFileSync(skill.filePath, "utf-8");
 			const body = stripFrontmatter(content).trim();
 			const skillBlock = `<skill name="${skill.name}" location="${skill.filePath}">\nReferences are relative to ${skill.baseDir}.\n\n${body}\n</skill>`;
-			return args ? `${skillBlock}\n\n${args}` : skillBlock;
+			const expandedText = args ? `${skillBlock}\n\n${args}` : skillBlock;
+			return { text: expandedText, skill };
 		} catch (err) {
 			// Emit error like extension commands do
 			this._extensionRunner?.emitError({
@@ -902,8 +926,38 @@ export class AgentSession {
 				event: "skill_expansion",
 				error: err instanceof Error ? err.message : String(err),
 			});
-			return text; // Return original on error
+			return { text }; // Return original on error
 		}
+	}
+
+	/**
+	 * Resolve a model override from a skill's model or model-size preferences.
+	 * Priority: model (specific) > model-size > undefined (no override).
+	 * Returns undefined if no matching model is found or available.
+	 */
+	private async _resolveSkillModel(skill: Skill): Promise<Model<any> | undefined> {
+		// model takes priority over model-size
+		if (skill.model) {
+			const availableModels = this._modelRegistry.getAvailable();
+			const result = parseModelPattern(skill.model, availableModels);
+			if (result.model) {
+				// Verify API key is available
+				const apiKey = await this._modelRegistry.getApiKey(result.model);
+				if (apiKey) return result.model;
+			}
+			// If specified model not found/available, fall through to model-size
+		}
+
+		if (skill.modelSize) {
+			const availableModels = this._modelRegistry.getAvailable();
+			const match = availableModels.find((m) => m.size === skill.modelSize);
+			if (match) {
+				const apiKey = await this._modelRegistry.getApiKey(match);
+				if (apiKey) return match;
+			}
+		}
+
+		return undefined;
 	}
 
 	/**
@@ -920,7 +974,7 @@ export class AgentSession {
 		}
 
 		// Expand skill commands and prompt templates
-		let expandedText = this._expandSkillCommand(text);
+		let expandedText = this._expandSkillCommand(text).text;
 		expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 
 		await this._queueSteer(expandedText, images);
@@ -940,7 +994,7 @@ export class AgentSession {
 		}
 
 		// Expand skill commands and prompt templates
-		let expandedText = this._expandSkillCommand(text);
+		let expandedText = this._expandSkillCommand(text).text;
 		expandedText = expandPromptTemplate(expandedText, [...this.promptTemplates]);
 
 		await this._queueFollowUp(expandedText, images);

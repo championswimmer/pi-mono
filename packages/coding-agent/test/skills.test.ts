@@ -188,6 +188,68 @@ describe("skills", () => {
 			expect(skills).toHaveLength(1);
 			expect(skills[0].disableModelInvocation).toBe(false);
 		});
+
+		it("should parse model frontmatter field", () => {
+			const { skills, diagnostics } = loadSkillsFromDir({
+				dir: join(fixturesDir, "model-skill"),
+				source: "test",
+			});
+
+			expect(skills).toHaveLength(1);
+			expect(skills[0].name).toBe("model-skill");
+			expect(skills[0].model).toBe("claude-sonnet");
+			expect(skills[0].modelSize).toBeUndefined();
+			expect(diagnostics).toHaveLength(0);
+		});
+
+		it("should parse model-size frontmatter field", () => {
+			const { skills, diagnostics } = loadSkillsFromDir({
+				dir: join(fixturesDir, "model-size-skill"),
+				source: "test",
+			});
+
+			expect(skills).toHaveLength(1);
+			expect(skills[0].name).toBe("model-size-skill");
+			expect(skills[0].modelSize).toBe("small");
+			expect(skills[0].model).toBeUndefined();
+			expect(diagnostics).toHaveLength(0);
+		});
+
+		it("should parse both model and model-size frontmatter fields", () => {
+			const { skills, diagnostics } = loadSkillsFromDir({
+				dir: join(fixturesDir, "model-and-size-skill"),
+				source: "test",
+			});
+
+			expect(skills).toHaveLength(1);
+			expect(skills[0].name).toBe("model-and-size-skill");
+			expect(skills[0].model).toBe("gpt-4o");
+			expect(skills[0].modelSize).toBe("large");
+			expect(diagnostics).toHaveLength(0);
+		});
+
+		it("should warn on invalid model-size and leave modelSize undefined", () => {
+			const { skills, diagnostics } = loadSkillsFromDir({
+				dir: join(fixturesDir, "invalid-model-size"),
+				source: "test",
+			});
+
+			expect(skills).toHaveLength(1);
+			expect(skills[0].name).toBe("invalid-model-size");
+			expect(skills[0].modelSize).toBeUndefined();
+			expect(diagnostics.some((d: ResourceDiagnostic) => d.message.includes("invalid model-size"))).toBe(true);
+		});
+
+		it("should default model and modelSize to undefined when not specified", () => {
+			const { skills } = loadSkillsFromDir({
+				dir: join(fixturesDir, "valid-skill"),
+				source: "test",
+			});
+
+			expect(skills).toHaveLength(1);
+			expect(skills[0].model).toBeUndefined();
+			expect(skills[0].modelSize).toBeUndefined();
+		});
 	});
 
 	describe("formatSkillsForPrompt", () => {
@@ -406,6 +468,55 @@ describe("skills", () => {
 			expect(skillMap.get("calendar")?.source).toBe("first");
 			expect(collisionWarnings).toHaveLength(1);
 			expect(collisionWarnings[0].message).toContain("name collision");
+		});
+	});
+
+	describe("skill model resolution", () => {
+		it("should prefer model over model-size when both are specified", () => {
+			const { skills } = loadSkillsFromDir({
+				dir: join(fixturesDir, "model-and-size-skill"),
+				source: "test",
+			});
+
+			expect(skills).toHaveLength(1);
+			const skill = skills[0];
+			// Both should be populated so the consumer can implement priority
+			expect(skill.model).toBe("gpt-4o");
+			expect(skill.modelSize).toBe("large");
+		});
+
+		it("should support model-only skill", () => {
+			const { skills } = loadSkillsFromDir({
+				dir: join(fixturesDir, "model-skill"),
+				source: "test",
+			});
+
+			expect(skills).toHaveLength(1);
+			expect(skills[0].model).toBe("claude-sonnet");
+			expect(skills[0].modelSize).toBeUndefined();
+		});
+
+		it("should support model-size-only skill", () => {
+			const { skills } = loadSkillsFromDir({
+				dir: join(fixturesDir, "model-size-skill"),
+				source: "test",
+			});
+
+			expect(skills).toHaveLength(1);
+			expect(skills[0].model).toBeUndefined();
+			expect(skills[0].modelSize).toBe("small");
+		});
+
+		it("should accept all valid model sizes", () => {
+			// Test 'medium' from a fixture (small and large already covered above)
+			const { skills, diagnostics } = loadSkillsFromDir({
+				dir: join(fixturesDir, "medium-model-size"),
+				source: "test",
+			});
+
+			expect(skills).toHaveLength(1);
+			expect(skills[0].modelSize).toBe("medium");
+			expect(diagnostics).toHaveLength(0);
 		});
 	});
 });
